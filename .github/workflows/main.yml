@@ -1,0 +1,43 @@
+name: Build Genshin Chess APK
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
+
+      - name: Generate Android Wrapper around index.html
+        run: |
+          mkdir -p app/src/main/assets app/src/main/java/com/genshin/chess
+          cp index.html app/src/main/assets/index.html
+          printf 'pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }\ndependencyResolutionManagement { repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS); repositories { google(); mavenCentral() } }\nrootProject.name = "GenshinChess"\ninclude ":app"\n' > settings.gradle
+          printf 'plugins { id "com.android.application" version "8.2.2" }\nandroid {\n  namespace "com.genshin.chess"\n  compileSdk 34\n  defaultConfig {\n    applicationId "com.genshin.chess"\n    minSdk 24\n    targetSdk 34\n    versionCode 1\n    versionName "1.0"\n  }\n}\n' > app/build.gradle
+          printf '<?xml version="1.0" encoding="utf-8"?><manifest xmlns:android="http://schemas.android.com/apk/res/android"><uses-permission android:name="android.permission.INTERNET"/><application android:label="Genshin Chess 3D" android:hardwareAccelerated="true" android:theme="@android:style/Theme.NoTitleBar.Fullscreen"><activity android:name=".MainActivity" android:exported="true" android:configChanges="orientation|screenSize"><intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter></activity></application></manifest>' > app/src/main/AndroidManifest.xml
+          printf 'package com.genshin.chess;\nimport android.app.Activity;\nimport android.os.Bundle;\nimport android.webkit.*;\npublic class MainActivity extends Activity {\n  @Override protected void onCreate(Bundle b) {\n    super.onCreate(b);\n    WebView w = new WebView(this);\n    w.getSettings().setJavaScriptEnabled(true);\n    w.getSettings().setDomStorageEnabled(true);\n    w.setWebChromeClient(new WebChromeClient());\n    setContentView(w);\n    w.loadUrl("file:///android_asset/index.html");\n  }\n}\n' > app/src/main/java/com/genshin/chess/MainActivity.java
+
+      - name: Build Debug APK
+        run: gradle assembleDebug --no-daemon
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Genshin-Chess-3D-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
+          
